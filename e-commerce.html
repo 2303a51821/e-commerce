@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>E-Commerce Patterns Demo</title>
+  <style>
+    :root{
+      --bg:#0f1724; --card:#0b1220; --accent:#06b6d4; --muted:#94a3b8; --glass:rgba(255,255,255,0.03);
+    }
+    body{
+      font-family:Inter,system-ui,Segoe UI,Roboto,Arial;
+      background:linear-gradient(180deg,#071026 0%, #0b1220 100%);
+      color:#e6eef6;
+      margin:0;
+      padding:32px;
+    }
+    .app{max-width:1100px;margin:0 auto;display:grid;grid-template-columns: 2fr 1fr; gap:20px;}
+    header{grid-column:1/-1; display:flex; justify-content:space-between; align-items:center}
+    h1{margin:0;font-size:20px}
+    .card{background:var(--card); padding:16px; border-radius:12px; box-shadow:0 6px 18px rgba(0,0,0,0.6); border:1px solid rgba(255,255,255,0.02);}
+    .products{display:grid;grid-template-columns:repeat(2,1fr); gap:12px}
+    .product{background:var(--glass); padding:12px; border-radius:8px;}
+    .product h3{margin:0 0 8px 0}
+    button{background:var(--accent); color:#021026; border:0; padding:8px 10px; border-radius:8px; cursor:pointer; font-weight:600}
+    .muted{color:var(--muted); font-size:13px}
+    .controls{display:flex; gap:8px; align-items:center; margin-top:8px}
+    .cart-list{list-style:none;padding:0;margin:0}
+    .cart-list li{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.03)}
+    .small{font-size:13px}
+    select,input[type=text]{padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
+    .log{max-height:180px;overflow:auto;padding:8px;background:rgba(0,0,0,0.2);border-radius:8px;font-family:monospace;font-size:13px}
+    .row{display:flex;gap:8px;align-items:center}
+    footer{grid-column:1/-1;margin-top:12px;color:var(--muted);font-size:13px}
+    .notify{background:linear-gradient(90deg, rgba(6,182,212,0.12), rgba(6,182,212,0.06)); padding:8px;border-radius:8px;color:var(--accent);font-weight:600}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Patterns Demo — E-Commerce (Observer, Strategy, Command)</h1>
+      <div class="muted small">Save as HTML → open in browser</div>
+    </header>
+
+    <!-- Left column: products & actions -->
+    <div class="card">
+      <h2>Products</h2>
+      <div class="products" id="products"></div>
+
+      <section style="margin-top:14px;">
+        <h3 class="small">Notifications</h3>
+        <div id="notifications" class="log"></div>
+      </section>
+
+      <section style="margin-top:14px;">
+        <h3 class="small">Demo Controls</h3>
+        <div class="row" style="margin-top:8px;">
+          <label class="small">Simulate price change: </label>
+          <select id="price-product"></select>
+          <input id="price-val" type="text" placeholder="new price" style="width:120px"/>
+          <button id="price-change">Set Price</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- Right column: cart & checkout -->
+    <aside class="card">
+      <h2>Cart</h2>
+      <ul id="cart-items" class="cart-list"></ul>
+
+      <div style="margin-top:8px" class="muted small">Total: ₹<span id="cart-total">0</span></div>
+
+      <div style="margin-top:8px">
+        <div class="row">
+          <select id="payment-select">
+            <option value="upi">UPI</option>
+            <option value="card">Card</option>
+            <option value="wallet">Wallet</option>
+          </select>
+          <button id="checkout">Checkout</button>
+        </div>
+
+        <div class="controls" style="margin-top:8px">
+          <button id="undo">Undo</button>
+          <button id="redo">Redo</button>
+          <input id="coupon-code" placeholder="COUPON10" />
+          <button id="apply-coupon">Apply</button>
+        </div>
+      </div>
+
+      <section style="margin-top:12px;">
+        <h3 class="small">Action log</h3>
+        <div id="action-log" class="log"></div>
+      </section>
+    </aside>
+
+    <footer>
+      This is a minimal demo showing how Observer notifies subscribers on price changes, Strategy selects payment at checkout, and Command encapsulates cart operations with undo/redo.
+    </footer>
+  </div>
+
+  <script>
+  /*******************************
+   * Patterns implemented in JS
+   *******************************/
+
+  /* ===== Observer (Product & Customer) ===== */
+  class Customer {
+    constructor(name) { this.name = name; }
+    update(product, newPrice) {
+      logNotification([NOTIFY] ${this.name}: ${product.name} price dropped to ₹${newPrice});
+    }
+  }
+
+  class Product {
+    constructor(id, name, price) {
+      this.id = id; this.name = name; this.price = price;
+      this.observers = new Set();
+    }
+    subscribe(observer) { this.observers.add(observer); }
+    unsubscribe(observer) { this.observers.delete(observer); }
+    setPrice(newPrice) {
+      this.price = newPrice;
+      this.notify();
+    }
+    notify() { for (let o of this.observers) o.update(this, this.price); }
+  }
+
+  /* ===== Strategy (Payment methods) ===== */
+  class PaymentStrategy {
+    pay(amount) { throw 'not implemented'; }
+  }
+  class UPIPayment extends PaymentStrategy {
+    pay(amount) { return Paid ₹${amount} using UPI.; }
+  }
+  class CardPayment extends PaymentStrategy {
+    pay(amount) { return Paid ₹${amount} using Card (simulated).; }
+  }
+  class WalletPayment extends PaymentStrategy {
+    pay(amount) { return Paid ₹${amount} using Wallet.; }
+  }
+
+  function getPaymentStrategyByKey(key) {
+    if (key === 'upi') return new UPIPayment();
+    if (key === 'card') return new CardPayment();
+    if (key === 'wallet') return new WalletPayment();
+    return new UPIPayment();
+  }
+
+  /* ===== Command Pattern (Cart actions + Undo/Redo) ===== */
+  class Command {
+    execute(){ throw 'exec not implemented'; }
+    undo(){ throw 'undo not implemented'; }
+  }
+
+  class Cart {
+    constructor(){
+      this.items = []; // {productId, name, price, qty}
+      this.history = [];   // stack of executed commands
+      this.future = [];    // for redo
+    }
+    execute(command){
+      command.execute();
+      this.history.push(command);
+      // clear redo history on new action
+      this.future = [];
+      renderCart();
+    }
+    undo(){
+      const cmd = this.history.pop();
+      if (cmd) {
+        cmd.undo();
+        this.future.push(cmd);
+      }
+      renderCart();
+    }
+    redo(){
+      const cmd = this.future.pop();
+      if (cmd) {
+        cmd.execute();
+        this.history.push(cmd);
+      }
+      renderCart();
+    }
+    total(){
+      return this.items.reduce((s,i)=>s + i.price * i.qty, 0);
+    }
+  }
+
+  class AddItemCommand extends Command {
+    constructor(cart, product) { super(); this.cart = cart; this.product = product; }
+    execute(){
+      let existing = this.cart.items.find(i => i.productId === this.product.id);
+      if (existing) existing.qty++;
+      else this.cart.items.push({ productId: this.product.id, name: this.product.name, price: this.product.price, qty:1 });
+      logAction(Added "${this.product.name}" to cart.);
+    }
+    undo(){
+      let idx = this.cart.items.findIndex(i => i.productId === this.product.id);
+      if (idx >= 0){
+        if (this.cart.items[idx].qty > 1) this.cart.items[idx].qty--;
+        else this.cart.items.splice(idx,1);
+        logAction(Undid add of "${this.product.name}".);
+      }
+    }
+  }
+
+  class RemoveItemCommand extends Command {
+    constructor(cart, productId) { super(); this.cart = cart; this.productId = productId; this.saved = null; }
+    execute(){
+      let idx = this.cart.items.findIndex(i => i.productId === this.productId);
+      if (idx >= 0){
+        this.saved = this.cart.items[idx];
+        this.cart.items.splice(idx,1);
+        logAction(Removed "${this.saved.name}" from cart.);
+      }
+    }
+    undo(){
+      if (this.saved) {
+        this.cart.items.push(this.saved);
+        logAction(Undid remove of "${this.saved.name}".);
+      }
+    }
+  }
+
+  class ApplyCouponCommand extends Command {
+    constructor(cart, code) { super(); this.cart = cart; this.code = code; this.applied = false; this.prevPrices = null; }
+    execute(){
+      // naive coupon: COUPON10 gives 10% off to all items
+      if (this.code === 'COUPON10' && !this.applied){
+        this.prevPrices = this.cart.items.map(i => ({id:i.productId, price:i.price}));
+        this.cart.items.forEach(i => i.price = +(i.price * 0.9).toFixed(2));
+        this.applied = true;
+        logAction('Coupon COUPON10 applied (10% off).');
+      } else {
+        logAction('Invalid coupon or already applied.');
+      }
+    }
+    undo(){
+      if (this.applied && this.prevPrices){
+        for (let p of this.prevPrices){
+          let it = this.cart.items.find(i => i.productId === p.id);
+          if (it) it.price = p.price;
+        }
+        this.applied = false;
+        logAction('Coupon COUPON10 removed (Undo).');
+      }
+    }
+  }
+
+  /* ===== UI wiring & demo data ===== */
+  const productsEl = document.getElementById('products');
+  const notificationsEl = document.getElementById('notifications');
+  const cartItemsEl = document.getElementById('cart-items');
+  const cartTotalEl = document.getElementById('cart-total');
+  const actionLogEl = document.getElementById('action-log');
+  const priceSelect = document.getElementById('price-product');
+  const priceVal = document.getElementById('price-val');
+
+  // create demo products
+  const products = [
+    new Product(1, 'Laptop', 50000),
+    new Product(2, 'Smartphone', 22000),
+    new Product(3, 'Headphones', 2200),
+    new Product(4, 'Smartwatch', 7999)
+  ];
+
+  // create demo customers and auto-subscribe them (simulate)
+  const alice = new Customer('Alice');
+  const bob = new Customer('Bob');
+  // subscribe Alice to Laptop and Bob to Smartphone (demo)
+  products[0].subscribe(alice);
+  products[1].subscribe(bob);
+
+  // create cart
+  const cart = new Cart();
+
+  function renderProducts(){
+    productsEl.innerHTML = '';
+    priceSelect.innerHTML = '';
+    for (let p of products){
+      const div = document.createElement('div');
+      div.className = 'product';
+      div.innerHTML = `
+        <h3>${p.name}</h3>
+        <div class="muted small">Price: ₹<span class="price">${p.price}</span></div>
+        <div class="controls" style="margin-top:8px">
+          <button class="add" data-id="${p.id}">Add to cart</button>
+          <button class="subscribe" data-id="${p.id}">Subscribe price</button>
+        </div>
+      `;
+      productsEl.appendChild(div);
+
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = ${p.name} (₹${p.price});
+      priceSelect.appendChild(opt);
+    }
+  }
+
+  function renderCart(){
+    cartItemsEl.innerHTML = '';
+    for (let item of cart.items){
+      const li = document.createElement('li');
+      li.innerHTML = `<div>${item.name} × ${item.qty}</div><div>₹${(item.price*item.qty).toFixed(2)} 
+        <button data-id="${item.productId}" class="remove" style="margin-left:8px">Remove</button></div>`;
+      cartItemsEl.appendChild(li);
+    }
+    cartTotalEl.textContent = cart.total().toFixed(2);
+  }
+
+  function logNotification(txt){
+    const p = document.createElement('div');
+    p.textContent = [${new Date().toLocaleTimeString()}] ${txt};
+    notificationsEl.prepend(p);
+  }
+
+  function logAction(txt){
+    const p = document.createElement('div');
+    p.textContent = [${new Date().toLocaleTimeString()}] ${txt};
+    actionLogEl.prepend(p);
+  }
+
+  // initial render
+  renderProducts();
+  renderCart();
+
+  // delegate product button clicks
+  productsEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    const id = Number(btn.dataset.id);
+    const product = products.find(p => p.id === id);
+    if (btn.classList.contains('add')){
+      const cmd = new AddItemCommand(cart, product);
+      cart.execute(cmd);
+    } else if (btn.classList.contains('subscribe')){
+      // open a quick prompt to enter subscriber name (simulated)
+      const name = prompt('Enter name to subscribe for price-drop notifications:', 'Guest');
+      if (name) {
+        const cust = new Customer(name);
+        product.subscribe(cust);
+        logAction(${name} subscribed to ${product.name} price alerts.);
+      }
+    }
+    renderCart();
+  });
+
+  // remove from cart delegation (since removes are rendered)
+  cartItemsEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('button.remove');
+    if (!btn) return;
+    const id = Number(btn.dataset.id);
+    const cmd = new RemoveItemCommand(cart, id);
+    cart.execute(cmd);
+    renderCart();
+  });
+
+  // price change simulation
+  document.getElementById('price-change').addEventListener('click', () => {
+    const pid = Number(priceSelect.value);
+    const val = parseFloat(priceVal.value);
+    if (!pid || isNaN(val) ) { alert('Pick product and enter numeric price'); return; }
+    const p = products.find(x => x.id === pid);
+    p.setPrice(val);
+    // update product UI prices
+    document.querySelectorAll('.product').forEach(el=>{
+      const name = el.querySelector('h3').textContent;
+      const prod = products.find(pp=>pp.name===name);
+      if (prod) el.querySelector('.price').textContent = prod.price;
+    });
+    renderProducts();
+    logAction(Price of ${p.name} set to ₹${p.price});
+  });
+
+  // undo/redo
+  document.getElementById('undo').addEventListener('click', ()=>{ cart.undo(); });
+  document.getElementById('redo').addEventListener('click', ()=>{ cart.redo(); });
+
+  // apply coupon
+  document.getElementById('apply-coupon').addEventListener('click', ()=>{
+    const code = document.getElementById('coupon-code').value.trim();
+    const cmd = new ApplyCouponCommand(cart, code);
+    cart.execute(cmd);
+    renderCart();
+  });
+
+  // checkout using selected strategy
+  document.getElementById('checkout').addEventListener('click', ()=>{
+    const key = document.getElementById('payment-select').value;
+    const strategy = getPaymentStrategyByKey(key);
+    const amount = cart.total().toFixed(2);
+    if (amount <= 0) { alert('Cart empty'); return; }
+    const res = strategy.pay(amount);
+    logAction('Checkout: ' + res);
+    alert(res + '\\n(Checkout simulated — no real payment)');
+  });
+
+  </script>
+</body>
+</html>
